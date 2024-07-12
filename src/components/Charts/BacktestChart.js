@@ -1,14 +1,31 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { widget } from '../../charting_library';
+import { createChart, CrosshairMode } from 'lightweight-charts';
+const BacktestChart = () => {4
 
-const BacktestChart = () => {
+
   const chartContainerRef = useRef(null);
-  // eslint-disable-next-line
-  const [webSocket, setWebSocket] = useState(null);
-  // const [instrument, setInstrument] = useState('NIFTY24MAYFUT');
-  // const [minutes, setMinutes] = useState(1);
-  // const minutesRef = useRef(null);
   const tvWidgetRef = useRef(null);
+
+  const [datastoreStatus, setdatastoreStatus] = useState(null);
+ // const [selectedValue, setSelectedValue] = useState('');
+ const selectedOptionRef=useRef(null);
+ let coordinates=[];
+   
+  let linetype_data=[]; 
+  let timePriceStore = [];
+  let timePriceStoreUnix = [];
+  let current_line_id=null;
+  let current_dropdown_option=null;
+  let current_line_mode=null;
+  // let last_offsetX=null;
+  // let last_offsetY=null;
+  let current_line_ids=[];
+  let all_stock_data=[];
+  let all_data=[];
+  let all_coordinates=[];
+  // let all_data_lines=[];
+  // let crossHairSubscription = null;
 
   const defaultProps = {
     symbol: 'AAPL',
@@ -19,7 +36,8 @@ const BacktestChart = () => {
     chartsStorageApiVersion: '1.1',
     clientId: 'tradingview.com',
     userId: 'public_user_id',
-    fullscreen: false,
+    fullscreen: true,
+    chart_scroll: true,
     autosize: true,
     studiesOverrides: {},
   };
@@ -48,185 +66,215 @@ const BacktestChart = () => {
       studies_overrides: defaultProps.studiesOverrides,
       theme: 'Dark', // Specify the theme as 'Dark' for dark mode
     };
+    const yellowDiv = document.createElement('div');
 
-    console.log("Initializing TradingView widget with options:", widgetOptions);
+// Apply styling to make it yellow
+yellowDiv.className='yellowdiv';
+yellowDiv.style.backgroundColor = 'yellow';
+yellowDiv.style.width = '700px'; // Example width
+yellowDiv.style.height = '700px'; // Example height
+yellowDiv.style.margin = '10px'; // Example margin
+yellowDiv.style.alignContent='center';
+    chartContainerRef.current.appendChild(yellowDiv);
+   // tvWidgetRef.current.appendChild(yellowDiv);
 
+    // Initialize TradingView widget
     tvWidgetRef.current = new widget(widgetOptions);
 
     tvWidgetRef.current.onChartReady(() => {
-      console.log("TradingView chart ready");
-      tvWidgetRef.current.headerReady().then(() => {
-        const button = tvWidgetRef.current.createButton();
-        button.setAttribute('title', 'Click to show a notification popup');
-        button.classList.add('apply-common-tooltip');
-        button.addEventListener('click', () => tvWidgetRef.current.showNoticeDialog({
-          title: 'Notification',
-          body: 'TradingView Charting Library API works correctly',
-          callback: () => {
-            console.log('Noticed!');
-          },
-        }));
+      const obj1=tvWidgetRef.current.chart();
+      const drawitem=obj1.getAllShapes();
+         // const subscribeToDrawingEvent= () =>{
+        let prev_id=null; 
+        tvWidgetRef.current.subscribe('drawing_event', (lid, lmode) => {
+          if(prev_id!=lid){
+            current_line_ids.push(lid);
+            prev_id=lid;
 
-        button.innerHTML = 'Check API';
-      });
+          }
+         
+          if (lmode === "remove") {
+            console.log("Remove the line from chart!!!");
+            console.log("Line ID:", lid);
+            let remove_line=lid;
+            console.log("Mode:", lmode);
+            if(all_stock_data[remove_line]){
+              all_stock_data[remove_line]=[];
+            }
+            // Implement your logic to remove the line from the chart
+          }
+          if (lmode === "create") {
+            current_line_id = lid;
+           
+            current_line_mode = lmode;
+      
+            
+          }
+        });
+     // }
+      // Function to handle crossHairMoved event
+      let stock_type_status=false;
+      const handleCrossHairMoved = ({ time, price,offsetX,offsetY }) => {
+        //subscribeToDrawingEvent();
+        
+        let date = new Date(time * 1000);
+        let formattedDate = date.toISOString();
+        console.log({time,price});
+        console.log({formattedDate,price});
+        console.log("Saving data during crosshair event");
+        timePriceStore.push({ time: formattedDate, price: price });
+        timePriceStoreUnix.push({ time: time, price: price });
 
+        coordinates.push({offsetX:offsetX,offsetY:offsetY})
+
+        const labelElement = document.createElement('div');
+       
+        labelElement.className = 'selected-label'; // Add a class name for easy identification
+        labelElement.style.position = 'absolute';
+        labelElement.style.left = `${offsetX}px`;  // Setting left position with offsetX
+        labelElement.style.top = `${offsetY}px`;   // Setting top position with offsetY
+       
+        labelElement.style.padding = '8px';
+        labelElement.style.backgroundColor = 'yellow';
+        labelElement.style.border = '1px solid black';
+        labelElement.style.zIndex = 1000; // Ensure it's above other elements
+        // selectedOptionRef.current
+        let store_color=current_dropdown_option;
+        labelElement.textContent = selectedOptionRef.current;
+        console.log("the line color up till now is")
+        console.log(labelElement.textContent);
+        if(stock_type_status===false){  
+     
+        chartContainerRef.current.appendChild(labelElement);
+        linetype_data.push(current_dropdown_option);
+        stock_type_status=true;
+        }
+       
+      
+
+      };
+      // Function to set line color based on selectedOptionRef.current
+const setLineColor = () => {
+  let lineColor;
+
+  if (selectedOptionRef.current === "buy-line") {
+      console.log("its a buy line");
+      lineColor = 'rgba(0, 255, 0, 1)'; // Green line
+  } else if (selectedOptionRef.current === "sell-line") {
+      console.log("its a sell line");
+      lineColor = 'rgba(255, 0, 0, 1)'; // Red line
+  } else if (selectedOptionRef.current === "target-line") {
+      console.log("its a target line");
+      lineColor = 'rgba(128, 0, 128, 1)'; // Purple line
+  } else if (selectedOptionRef.current === "stop-watch") {
+      console.log("its a stop-watch line");
+      lineColor = 'rgba(255, 255, 0, 1)'; // Yellow line
+  } else {
+      console.log("its a line without any tag");
+      lineColor = 'rgba(255, 255, 255, 1)'; // Default (white) line
+  }
+
+  // Apply the determined line color
+  tvWidgetRef.current.applyOverrides({ linecolor: lineColor });
+};
+
+
+      // Function to handle drawing event
+      const handleDrawingEvent = (event) => {
+       // setLineColor();
+       
+      
+        console.log(obj1.getAllShapes());
+        if (event.value === "LineToolTrendLine") {
+        
+          tvWidgetRef.current.activeChart().crossHairMoved().subscribe(null, handleCrossHairMoved);
+        }
+      };
+
+      // Subscribe to drawing events
+      tvWidgetRef.current.subscribe('drawing', handleDrawingEvent);
+     
+      const handleMouseDown=()=>{
+        setLineColor();
+       
+      }
+    
+
+
+      // Function to handle mouseup event
+      const handleMouseUp = () => {
+        console.log("Mouse up detected, unsubscribing from crossHairMoved event");
+        all_data.push(timePriceStore);
+     
+        stock_type_status=false;
+        all_coordinates.push(coordinates);
+        let filtered_coordinates=all_coordinates.filter(item=>item.length>0);
+       // last_offsetX=all_coordinates[all_coordinates.length-1].offsetX;
+        //last_offsetY=all_coordinates[all_coordinates.length-1].offsetY;
+        //are the last coordinates of current line
+        let filtered_data = all_data.filter(item => item.length > 0);
+       
+        console.log("LINEID-ARR , LINEDATA-ARR , LINETYPE-ARR");
+        console.log(current_line_ids);
+        console.log(filtered_data);
+        console.log(linetype_data);
+
+       
+          if(current_line_ids.length && filtered_data.length ){
+            for (let i = 0; i < current_line_ids.length; i++) {
+              all_stock_data[current_line_ids[i]] ={linedata:filtered_data[i],linestocktype:linetype_data[i]}
+            }
+            
+            console.log("now the data after is ....");
+            console.log(all_stock_data);
+  
+          }     
+    
+        timePriceStore=[];
+        timePriceStoreUnix=[];
+        coordinates=[];
+        current_dropdown_option=null; // if not selected any option and made the next line do give label as null
+        // Unsubscribe from crossHairMoved event
+       tvWidgetRef.current.activeChart().crossHairMoved().unsubscribe(null, handleCrossHairMoved);
+      };
+
+      // Subscribe to mouse_up event to unsubscribe from crossHairMoved
+       tvWidgetRef.current.subscribe('mouse_up', handleMouseUp);
+       tvWidgetRef.current.subscribe('mouse_down', handleMouseDown);
+
+      // Cleanup function
       return () => {
-        tvWidgetRef.current.remove();
+        if (tvWidgetRef.current) {
+          tvWidgetRef.current.remove();
+        }
       };
     });
-
-    // const connectWebSocket = () => {
-    //   let tradingDataWebSocket = new WebSocket('ws://127.0.0.1:8000/ws/trading_data/');
-
-    //   tradingDataWebSocket.onopen = () => {
-    //     console.log('Connected to tradingDataWebSocket');
-    //     setWebSocket(tradingDataWebSocket);
-    //   };
-
-    //   tradingDataWebSocket.onerror = (error) => {
-    //     console.error('WebSocket error:', error);
-    //   };
-
-    //   tradingDataWebSocket.onmessage = (event) => {
-    //     const data = JSON.parse(event.data);
-    //     if (data.timestamp && data.trading_symbol && data.last_price) {
-    //       const bar = {
-    //         time: new Date(data.timestamp).getTime() / 1000,
-    //         open: parseFloat(data.open_price),
-    //         high: parseFloat(data.high_price),
-    //         low: parseFloat(data.low_price),
-    //         close: parseFloat(data.close_price),
-    //       };
-    //       console.log("Received bar data from WebSocket:", bar);
-    //       tvWidgetRef.current.chart().updateData(bar);
-    //     }
-    //   };
-
-    //   tradingDataWebSocket.onclose = (event) => {
-    //     console.log('tradingDataWebSocket closed:', event);
-    //     setWebSocket(null);
-    //   };
-    // };
-
-    // if (!webSocket) {
-    //   connectWebSocket();
-    // }
-
-    // return () => {
-    //   if (webSocket) {
-    //     webSocket.close();
-    //     setWebSocket(null);
-    //   }
-    //   if (tvWidgetRef.current) {
-    //     tvWidgetRef.current.remove();
-    //   }
-    // };
-  }, [webSocket]);
-
-  // const sendCommand = () => {
-  //   console.log(`Sending command: ${instrument} for ${minutes} minute(s)`);
-  //   if (webSocket && webSocket.readyState === WebSocket.OPEN) {
-  //     const commandData = {
-  //       instrument,
-  //       minutes,
-  //     };
-  //     webSocket.send(JSON.stringify(commandData));
-  //   } else {
-  //     console.log('WebSocket is not connected.');
-  //   }
-  // };
-
-  // const handleConnect = () => {
-  //   if (!webSocket) {
-  //     console.log('Connecting to WebSocket...');
-  //     setWebSocket();
-  //   } else {
-  //     console.log('WebSocket is already connected.');
-  //   }
-  // };
-
-  // const handleDisconnect = () => {
-  //   if (webSocket) {
-  //     webSocket.close();
-  //     setWebSocket(null);
-  //     console.log('Disconnected from WebSocket.');
-  //   } else {
-  //     console.log('WebSocket is not connected.');
-  //   }
-  // };
-
+  }, []); // Include relevant dependencies
+  const handleDropdownChange = (event) => {
+   // setSelectedValue(event.target.value);
+   selectedOptionRef.current=event.target.value;
+   current_dropdown_option=selectedOptionRef.current;
+  };
   return (
+    <>
     <div style={{ marginTop: '20px', marginLeft: '20px' }}>
-      <div style={{ position: 'relative', marginBottom: '20px' }}>
-        <div style={{ display: 'flex', justifyContent: 'flex-start', alignItems: 'center' }}>
-          {/* <button
-            style={{
-              backgroundColor: 'green',
-              color: 'white',
-              border: 'none',
-              padding: '10px 20px',
-              margin: '5px',
-              cursor: 'pointer',
-              fontSize: '16px',
-              borderRadius: '5px',
-            }}
-            onClick={handleConnect}
-          >
-            Connect
-          </button>
-          <button
-            style={{
-              backgroundColor: 'red',
-              color: 'white',
-              border: 'none',
-              padding: '10px 20px',
-              margin: '5px',
-              cursor: 'pointer',
-              fontSize: '16px',
-              borderRadius: '5px',
-            }}
-            onClick={handleDisconnect}
-          >
-            Disconnect
-          </button>
-          <input
-            type="text"
-            value={instrument}
-            onChange={(e) => setInstrument(e.target.value)}
-            placeholder="Instrument"
-            style={{color:'black', marginRight: '10px', padding: '10px', fontSize: '16px', borderRadius: '5px', border: '1px solid #ccc' }}
-          />
-          <select
-            ref={minutesRef}
-            value={minutes}
-            onChange={(e) => setMinutes(parseInt(e.target.value, 10))}
-            className="form-control ml-2 mr-2 py-3 px-4 bg-blue-200 border border-blue-300 text-gray-800 rounded-lg text-base"
-          >
-            <option value="1">1 Minute</option>
-            <option value="2">2 Minutes</option>
-            <option value="3">3 Minutes</option>
-            <option value="4">4 Minutes</option>
-            <option value="5">5 Minutes</option>
-          </select>
-          <button
-            onClick={sendCommand}
-            style={{
-              backgroundColor: 'blue',
-              color: 'white',
-              border: 'none',
-              padding: '10px 20px',
-              cursor: 'pointer',
-              fontSize: '16px',
-              borderRadius: '5px',
-            }}
-          >
-            Send Command
-          </button> */}
-        </div>
-      </div>
-
-      <div style={{ height: '480px', width: '98%' }} ref={chartContainerRef} className={'TVChartContainer'}></div>
+      {/* UI elements (buttons, inputs, etc.) can be added here if needed */}
+      <div ref={chartContainerRef} className={'TVChartContainer w-full h-full'}></div>
+      <div>
+  
+  <select id="action-select" value={selectedOptionRef.current || ''} onChange={handleDropdownChange} style={{position: 'relative',backgroundColor:'black',zIndex:'11',top:'-9pc',width:'55px',color:'white'}}>
+   
+    <option disabled selected value="">select Line Type</option>
+    <option value="buy-line">Buy-line</option>
+    <option value="sell-line">Sell-line</option>
+    <option value="stop-watch">Stop-watch</option>
+    <option value="target-line">Target-line</option>
+  </select>
+</div>
+     
     </div>
+    
+   </>
   );
 };
 
